@@ -3,6 +3,7 @@
 ### Install dependencies
 
 Put `elepay-php-sdk` in the `Resource/vendor/` directory
+
 Use the following command to generate autoload in the `Resource/vendor/` directory
 
 ```shell
