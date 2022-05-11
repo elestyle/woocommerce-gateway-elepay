@@ -1,5 +1,9 @@
-# elepay-eccube-plugin
+# README
 
+## How to Installation
+Please see the instructions for user installation [here](https://developer.elepay.io/docs/woocommerce-plugin).
+
+## Development Infomations
 ### Install dependencies
 
 Put `elepay-php-sdk` in the `vendor/` directory
