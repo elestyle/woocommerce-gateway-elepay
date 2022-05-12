@@ -1,6 +1,6 @@
 {
   "name": "woocommerce-gateway/elepay",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "elepay決済プラグイン",
   "require": {
     "elestyle/elepay-php-sdk": "^1.1"

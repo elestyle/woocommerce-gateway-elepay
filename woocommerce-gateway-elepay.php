@@ -5,7 +5,7 @@
  * Description: elepay決済プラグイン
  * Author: elepay
  * Author URI: https://elepay.io/
- * Version: 0.1.1
+ * Version: 1.0.0
  * Requires at least: 5.0
  * Tested up to: 5.7
  * WC requires at least: 3.0
@@ -24,7 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Required minimums and constants
  */
-define( 'WC_ELEPAY_VERSION', '0.1.1' );
+define( 'WC_ELEPAY_VERSION', '1.0.0' );
 define( 'WC_ELEPAY_MAIN_FILE', __FILE__ );
 define( 'WC_ELEPAY_PLUGIN_URL', untrailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
 define( 'WC_ELEPAY_PLUGIN_PATH', untrailingslashit( plugin_dir_path( __FILE__ ) ) );
