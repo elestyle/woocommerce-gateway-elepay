@@ -6,10 +6,10 @@
  * Author: elepay
  * Author URI: https://elepay.io/
  * Version: 1.0.0
- * Requires at least: 5.0
- * Tested up to: 5.7
- * WC requires at least: 3.0
- * WC tested up to: 5.4
+ * Requires at least: 6.0
+ * Tested up to: 6.0
+ * WC requires at least: 8.0
+ * WC tested up to: 8.0
  * Text Domain: woocommerce-gateway-elepay
  * Domain Path: /languages
  */
