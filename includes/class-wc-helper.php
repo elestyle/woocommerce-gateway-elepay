@@ -7,14 +7,10 @@ require_once(__DIR__ . '/../vendor/autoload.php');
 
 use Automattic\WooCommerce\Admin\Overrides\Order;
 use Elepay\Api\CodeApi;
-use Elepay\Api\ChargeApi;
-use Elepay\Api\CodeSettingApi;
 use Elepay\ApiException;
 use Elepay\Configuration;
 use Elepay\Model\CodeDto;
 use Elepay\Model\CodeReq;
-use Elepay\Model\ChargeDto;
-use Elepay\Model\CodePaymentMethodResponse;
 
 /**
  * Provides static methods as helpers.
@@ -92,12 +88,12 @@ class WC_Elepay_Helper {
         $codeReq->setAmount((integer)$order->get_total());
         $codeReq->setCurrency($order->get_currency());
         $codeReq->setFrontUrl($frontUrl);
-        wc_elepay_log($codeReq);
+        WC_Elepay_Logger::log('[createCode] request: ' . $codeReq);
         /** @var CodeApi $codeApi */
         $codeApi = new CodeApi(null, self::get_elepay_sdk_config());
         /** @var CodeDto $codeDto */
         $codeDto = $codeApi->createCode($codeReq);
-        wc_elepay_log($codeDto);
+        WC_Elepay_Logger::log('[createCode] response: ' . $codeDto);
         $json = (string)$codeDto;
         return json_decode($json, true);
     }
@@ -110,12 +106,7 @@ class WC_Elepay_Helper {
      * @throws ApiException
      */
     public static function get_code_object($codeId) {
-        /** @var CodeApi $codeApi */
-        $codeApi = new CodeApi(null, self::get_elepay_sdk_config());
-        /** @var CodeDto $codeDto */
-        $codeDto = $codeApi->retrieveCode($codeId);
-        $json = (string)$codeDto;
-        return json_decode($json, true);
+        return self::request_api('/codes/' . rawurlencode($codeId));
     }
 
     /**
@@ -126,12 +117,36 @@ class WC_Elepay_Helper {
      * @throws ApiException
      */
     public static function get_charge_object($chargeId) {
-        /** @var ChargeApi $chargeApi */
-        $chargeApi = new ChargeApi(null, self::get_elepay_sdk_config());
-        /** @var ChargeDto $chargeDto */
-        $chargeDto = $chargeApi->retrieveCharge($chargeId);
-        $json = (string)$chargeDto;
-        return json_decode($json, true);
+        return self::request_api('/charges/' . rawurlencode($chargeId));
+    }
+
+    /**
+     * 以原始 JSON 调用 elepay GET 接口。
+     *
+     * SDK 会把 paymentMethod 反序列化成 PaymentMethodType 枚举，elepay 新增的支付方式不在枚举里时
+     * 整个响应都会抛 InvalidArgumentException，所以响应里含支付方式的接口都不走 SDK。
+     *
+     * @param string $path
+     * @return array
+     * @throws ApiException
+     */
+    private static function request_api($path) {
+        $settings = get_option('woocommerce_elepay_settings');
+        $response = wp_remote_get(self::API_HOST . $path, [
+            'headers' => [
+                'Authorization' => 'Basic ' . base64_encode($settings['secret_key'] . ':'),
+                'Accept' => 'application/json',
+            ],
+        ]);
+        if (is_wp_error($response)) {
+            throw new ApiException('[' . $path . '] ' . $response->get_error_message());
+        }
+        $code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        if ($code < 200 || $code > 299) {
+            throw new ApiException('[' . $path . '] HTTP ' . $code . ': ' . $body, $code, null, $body);
+        }
+        return json_decode($body, true);
     }
 
     /**
@@ -140,7 +155,10 @@ class WC_Elepay_Helper {
     public static function get_payment_methods() {
         try {
             $response = wp_remote_get( self::PAYMENT_METHODS_INFO_URL);
-            $content = $response['body'];
+            if (is_wp_error($response)) {
+                throw new Exception($response->get_error_message());
+            }
+            $content = wp_remote_retrieve_body($response);
             /**
              * $paymentMethodMap 數據結構
              * {
@@ -161,11 +179,6 @@ class WC_Elepay_Helper {
              */
             $paymentMethodMap = json_decode($content, true);
 
-            /** @var CodeSettingApi $codeSettingApi */
-            $codeSettingApi = new CodeSettingApi(null, self::get_elepay_sdk_config());
-            /** @var CodePaymentMethodResponse $codePaymentMethodResponse */
-            $codePaymentMethodResponse = $codeSettingApi->listCodePaymentMethods();
-            $json = (string)$codePaymentMethodResponse;
             /**
              * $availablePaymentMethods 數據結構
              * [
@@ -179,12 +192,12 @@ class WC_Elepay_Helper {
              *   ...
              * ]
              */
-            $availablePaymentMethods = json_decode($json, true)['paymentMethods'];
+            $availablePaymentMethods = self::request_api('/code-setting/payment-methods')['paymentMethods'] ?? [];
 
             $paymentMethods = [];
             foreach ($availablePaymentMethods as $item) {
-                $key = $item['paymentMethod'];
-                $paymentMethodInfo = $paymentMethodMap[$key];
+                $key = $item['paymentMethod'] ?? '';
+                $paymentMethodInfo = $paymentMethodMap[$key] ?? null;
 
                 if (
                     empty($key) ||
@@ -194,9 +207,10 @@ class WC_Elepay_Helper {
                 ) continue;
 
                 if ($key === 'creditcard') {
-                    foreach ($item['brand'] as $brand) {
+                    foreach ($item['brand'] ?? [] as $brand) {
                         $key = 'creditcard_' . $brand;
-                        $paymentMethodInfo = $paymentMethodMap[$key];
+                        $paymentMethodInfo = $paymentMethodMap[$key] ?? null;
+                        if (empty($paymentMethodInfo)) continue;
                         $paymentMethods []= self::get_payment_method_info($key, $paymentMethodInfo, $item);
                     }
                 } else {

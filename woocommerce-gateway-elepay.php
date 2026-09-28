@@ -6,9 +6,10 @@
  * Author: elepay
  * Author URI: https://elepay.io/
  * Version: 1.0.0
- * Requires at least: 6.0
+ * Requires at least: 5.8
+ * Requires PHP: 7.3
  * Tested up to: 6.0
- * WC requires at least: 8.0
+ * WC requires at least: 6.6
  * WC tested up to: 8.0
  * Text Domain: woocommerce-gateway-elepay
  * Domain Path: /languages
@@ -138,7 +139,6 @@ function elepay_init_gateway_class() {
         }
 
         private function init_includes() {
-            require_once WC_ELEPAY_PLUGIN_PATH . '/includes/utils.php';
             require_once WC_ELEPAY_PLUGIN_PATH . '/includes/class-wc-logger.php';
             require_once WC_ELEPAY_PLUGIN_PATH . '/includes/class-wc-helper.php';
         }
@@ -253,7 +253,7 @@ function elepay_init_gateway_class() {
                     'result' => 'success',
                     'redirect' => $redirect_url
                 ];
-            } catch ( InvalidArgumentException $e ) {
+            } catch ( Exception $e ) {
                 WC_Elepay_Logger::log( '[注文処理] ERROR::Exception when calling CodeApi->createCode::' . $e->getMessage() );
                 wc_add_notice( __( 'Payment process encountered error, please contact us.', 'woocommerce-gateway-elepay' ), 'error' );
                 return null;
@@ -298,8 +298,8 @@ function elepay_init_gateway_class() {
                         WC_Elepay_Logger::log( '[注文処理] 購入完了画面へ遷移します.' );
                         WC_Elepay_Helper::redirect( $order->get_checkout_order_received_url() );
                     }
-                } catch ( InvalidArgumentException $e ) {
-                    WC_Elepay_Logger::log( '[注文処理] ERROR::Exception when calling ChargeApi->retrieveCharge::' . $e->getMessage() );
+                } catch ( Exception $e ) {
+                    WC_Elepay_Logger::log( '[注文処理] ERROR::Exception when retrieving charge::' . $e->getMessage() );
                     wc_add_notice( __( 'Payment process encountered error, please contact us.', 'woocommerce-gateway-elepay' ), 'error' );
                 }
             } else {
@@ -319,8 +319,8 @@ function elepay_init_gateway_class() {
         public function webhook() {
             $request_body = file_get_contents( 'php://input' );
             $data = json_decode( $request_body, true );
-            $charge_id = $data['data']['object']['id'];
-            $order_id = WC_Elepay_Helper::parse_order_no( $data['data']['object']['orderNo'] );
+            $charge_id = $data['data']['object']['id'] ?? '';
+            $order_id = WC_Elepay_Helper::parse_order_no( $data['data']['object']['orderNo'] ?? '' );
 
             if ( empty( $order_id ) || empty( $charge_id ) ) {
                 status_header( 400 );
@@ -341,7 +341,15 @@ function elepay_init_gateway_class() {
                 exit;
             }
 
-            $charge_object = WC_Elepay_Helper::get_charge_object( $charge_id );
+            try {
+                $charge_object = WC_Elepay_Helper::get_charge_object( $charge_id );
+            } catch ( Exception $e ) {
+                // 取 charge 失败是本端或 elepay 的临时故障，不是请求本身有误，所以不返回 400。
+                status_header( 500 );
+                WC_Elepay_Logger::log( '[Webhook] ERROR::Exception when retrieving charge::' . $e->getMessage() );
+                echo 'Failed to retrieve charge.';
+                exit;
+            }
 
             if ( empty( $charge_object ) ) {
                 status_header( 400 );
@@ -444,7 +452,15 @@ function elepay_init_gateway_class() {
 
         public function get_transaction_url( $order ) {
             $charge_id = $order->get_transaction_id();
-            $charge_object = WC_Elepay_Helper::get_charge_object($charge_id);
+            if ( empty( $charge_id ) ) {
+                return '';
+            }
+            try {
+                $charge_object = WC_Elepay_Helper::get_charge_object($charge_id);
+            } catch ( Exception $e ) {
+                WC_Elepay_Logger::log( '[管理画面] ERROR::Exception when retrieving charge::' . $e->getMessage() );
+                return '';
+            }
             $this->view_transaction_url = WC_Elepay_Helper::ADMIN_HOST .
                 '/apps/' . $charge_object['appId'] . '/gw/payment/charges/' . $charge_id;
             return parent::get_transaction_url( $order );
