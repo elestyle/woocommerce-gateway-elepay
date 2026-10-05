@@ -107,7 +107,7 @@ function elepay_init_gateway_class() {
             $this->icon = 'https://files.elecdn.com/dashboard/img/partner/elepay/logo-full.svg'; // URL of the icon that will be displayed on checkout page near your gateway name
             $this->title = __( 'QR Code Payment', 'woocommerce-gateway-elepay' );
             $this->description = ' ';
-            $this->order_button_text = __( 'QR Code Payment', 'woocommerce-gateway-elepay' );
+            $this->order_button_text = __( 'Pay', 'woocommerce-gateway-elepay' );
             $this->method_title = __( 'elepay Payment', 'woocommerce-gateway-elepay' );
             $this->method_description = __( 'elepay allows you to make payments using a variety of methods including: Credit Cards, PayPay, LINE Pay, Merpay, auPAY, RPay, WeChat Pay, Alipay, Union Pay, etc.', 'woocommerce-gateway-elepay' );
             $this->has_fields = false; // in case you need a custom credit card form

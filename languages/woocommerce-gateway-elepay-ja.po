@@ -121,3 +121,7 @@ msgstr ""
 #. Name of the plugin
 msgid "WooCommerce elepay Gateway"
 msgstr "elepay Plug-in for WooCommerce"
+
+#: woocommerce-gateway-elepay.php:110
+msgid "Pay"
+msgstr "お支払い"
