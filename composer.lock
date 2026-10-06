@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f8be7cfdb99247e6627544d5c1b8e99a",
+    "content-hash": "03c085832777edf4c59857c5366460db",
     "packages": [
         {
             "name": "elestyle/elepay-php-sdk",
