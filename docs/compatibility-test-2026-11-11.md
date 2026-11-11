@@ -48,7 +48,7 @@ elepay からローカル環境へは Webhook が届かないため、テスト�
 1. **ブロックチェックアウトに elepay が表示されない（利用可否に影響）**
    WooCommerce の新規ストアでは、チェックアウトページが標準で Checkout Block になる。プラグインがブロックチェックアウト用の決済方法（`Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType`）を登録していないため、ブロック決済方法の登録一覧には `cheque, paypal, bacs, cod` しかなく、チェックアウト画面に「利用可能な支払い方法がありません」と表示される。API キーとは無関係で、同じ設定のままクラシックのショートコードに切り替えれば表示される。
 
-2. **HPOS 互換性が未宣言。HPOS 有効時に決済方法名が書き込まれない**
+2. **HPOS 互換性が未宣言。HPOS 有効時に決済方法名が書き込まれない**（本 PR で修正済み）
    - `FeaturesUtil::declare_compatibility( 'custom_order_tables', ... )` による宣言がないため、WooCommerce は uncertain と判定し、プラグイン有効中は `wp wc hpos enable` が拒否される（`Some installed plugins are incompatible`）。
    - HPOS を強制的に有効化して `order_validate` を呼び出したところ、`transaction_id` は正しく保存されたが、`update_post_meta( ..., '_payment_method_title', ... )` は旧来の postmeta にしか書き込まれず、注文の決済方法名は変わらなかった。
    - Webhook 経由の決済完了でも再現：HPOS 有効時は決済方法名が「QRコード決済」のまま、HPOS 無効時は「PayPay」に正しく更新された。
@@ -65,7 +65,7 @@ elepay からローカル環境へは Webhook が届かないため、テスト�
 6. **UI：elepay のロゴが大きすぎる**
    `$this->icon` が出力する `<img>` にサイズ指定がなく、SVG 自体にも固有サイズがないため、Twenty Twenty-Five などのブロックテーマではコンテナ幅いっぱいに広がる。
 
-7. **Webhook：存在しない charge にも 500 を返す（軽微）**
+7. **Webhook：存在しない charge にも 500 を返す（軽微）**（本 PR で修正済み）
    charge 取得の失敗はすべて一時障害として 500 を返すため、charge が存在しない（404）場合も elepay 側でリトライが続く。404 は 400 として扱うのが望ましい。
 
 ### 未検証
@@ -136,3 +136,15 @@ wp option update woocommerce_price_num_decimals 0
 wp post update "$(wp option get woocommerce_checkout_page_id)" \
   --post_content='<!-- wp:shortcode -->[woocommerce_checkout]<!-- /wp:shortcode -->'
 ```
+
+## 修正後の再検証（本 PR）
+
+問題 2・7 の修正後、同じモック環境で再検証した。
+
+| ケース | 結果 |
+|---|---|
+| HPOS 互換性 | WooCommerce が compatible と判定し、`wp wc hpos enable` がそのまま成功する |
+| HPOS 有効時の Webhook 決済完了 | 決済方法名が「PayPay」に更新され、注文メモも「PayPay での支払い」になる |
+| HPOS 無効時の Webhook 決済完了 | 決済方法名が「PayPay」に更新され、postmeta の `_payment_method_title` は 1 件のみ（重複なし） |
+| charge が存在しない（API が 404） | 400 `Charge does not exist.` |
+| API が 500 / 金額不一致 / 重複通知 | それぞれ 500 / 400 / 200（変更なし） |

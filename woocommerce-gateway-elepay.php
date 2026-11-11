@@ -33,6 +33,15 @@ define( 'WC_ELEPAY_TEXT_DOMAIN', 'woocommerce-gateway-elepay' );
 define( 'WC_ELEPAY_WEBHOOK_NAME', 'wc_elepay_paid' );
 
 /*
+ * Declare compatibility with High-Performance Order Storage (HPOS)
+ */
+add_action( 'before_woocommerce_init', function () {
+    if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+    }
+} );
+
+/*
  * This action hook registers our PHP class as a WooCommerce payment gateway
  */
 add_filter( 'woocommerce_payment_gateways', 'elepay_add_gateway_class' );
@@ -343,7 +352,14 @@ function elepay_init_gateway_class() {
             try {
                 $charge_object = WC_Elepay_Helper::get_charge_object( $charge_id );
             } catch ( Exception $e ) {
-                // 取 charge 失败是本端或 elepay 的临时故障，不是请求本身有误，所以不返回 400。
+                // charge 不存在时重试也没用，按请求有误返回 400，免得 elepay 一直重发。
+                if ( $e instanceof ApiException && $e->getCode() === 404 ) {
+                    status_header( 400 );
+                    WC_Elepay_Logger::log( '[Webhook] ERROR::Charge does not exist::' . $e->getMessage() );
+                    echo 'Charge does not exist.';
+                    exit;
+                }
+                // 其余失败是本端或 elepay 的临时故障，不是请求本身有误，所以返回 500 让 elepay 重试。
                 status_header( 500 );
                 WC_Elepay_Logger::log( '[Webhook] ERROR::Exception when retrieving charge::' . $e->getMessage() );
                 echo 'Failed to retrieve charge.';
@@ -419,9 +435,8 @@ function elepay_init_gateway_class() {
                 }
             }
 
-            // 不能使用 $order->update_meta_data，因為他會創建一條新的 _payment_method_title 數據
-            update_post_meta( $order->get_id(), '_payment_method_title', $payment_method_name );
-
+            // 支付方式名称是订单的内置属性，用 setter 写入，HPOS 下才会存进订单表
+            $order->set_payment_method_title( $payment_method_name );
             $order->set_transaction_id( $charge_object['id'] );
             if ( is_callable( [ $order, 'save' ] ) ) {
                 $order->save();
