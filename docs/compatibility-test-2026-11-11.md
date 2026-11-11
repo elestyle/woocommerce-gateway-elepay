@@ -31,6 +31,18 @@
 | 注文支払いページからの再支払い | code が再作成され、再び EasyCheckout が正常に開く | ブラウザ |
 | Webhook のパラメータチェック | パラメータ不足・注文が存在しない場合はいずれも 400 を返す | curl |
 
+### Webhook（elepay API をモックして検証）
+
+elepay からローカル環境へは Webhook が届かないため、テスト環境にだけ mu-plugin を置き、`pre_http_request` で `GET https://api.elepay.io/charges/{id}` を横取りして、用意した charge JSON を返すようにした。そのうえで curl から `/?wc-api=wc_elepay_paid` に Webhook ボディを POST し、レスポンス・注文ステータス・取引 ID・注文メモを確認した。
+
+| ケース | レスポンス | 注文 |
+|---|---|---|
+| 正常（captured、金額・注文番号一致） | 200 `Success` | `processing` になり、取引 ID と「elepay決済完了」メモが記録される |
+| 同じ charge の重複通知 | 200 `Success` | 変化なし、メモの重複もなし（冪等） |
+| 金額不一致 / status が captured 以外 / 注文番号不一致 | 400 `Order validation failed.` | `on-hold` のまま |
+| elepay API が 500 を返す | 500 `Failed to retrieve charge.` | `on-hold` のまま |
+| charge が存在しない（API が 404） | 500 `Failed to retrieve charge.` | `on-hold` のまま |
+
 ### 問題
 
 1. **ブロックチェックアウトに elepay が表示されない（利用可否に影響）**
@@ -39,6 +51,7 @@
 2. **HPOS 互換性が未宣言。HPOS 有効時に決済方法名が書き込まれない**
    - `FeaturesUtil::declare_compatibility( 'custom_order_tables', ... )` による宣言がないため、WooCommerce は uncertain と判定し、プラグイン有効中は `wp wc hpos enable` が拒否される（`Some installed plugins are incompatible`）。
    - HPOS を強制的に有効化して `order_validate` を呼び出したところ、`transaction_id` は正しく保存されたが、`update_post_meta( ..., '_payment_method_title', ... )` は旧来の postmeta にしか書き込まれず、注文の決済方法名は変わらなかった。
+   - Webhook 経由の決済完了でも再現：HPOS 有効時は決済方法名が「QRコード決済」のまま、HPOS 無効時は「PayPay」に正しく更新された。
 
 3. **createCode 失敗時に注文が on-hold のまま残る**
    `process_payment` は注文を `on-hold` に変更してから createCode を呼び出すため、呼び出しが失敗すると（実測は 401。ネットワーク障害や elepay 側の一時障害でも同様）注文が元に戻らない。
@@ -52,11 +65,13 @@
 6. **UI：elepay のロゴが大きすぎる**
    `$this->icon` が出力する `<img>` にサイズ指定がなく、SVG 自体にも固有サイズがないため、Twenty Twenty-Five などのブロックテーマではコンテナ幅いっぱいに広がる。
 
+7. **Webhook：存在しない charge にも 500 を返す（軽微）**
+   charge 取得の失敗はすべて一時障害として 500 を返すため、charge が存在しない（404）場合も elepay 側でリトライが続く。404 は 400 として扱うのが望ましい。
+
 ### 未検証
 
 - 決済完了後のリダイレクト（`status=captured` → 注文完了ページ → 注文が processing になる）。実際の決済が必要。
-- Webhook による注文完了。elepay からローカル環境にアクセスできないため、ngrok などで公開 URL を用意してから検証する必要がある。
-- HPOS 有効時の、実決済完了後の決済方法名（問題 2 は `order_validate` を直接呼び出して確認したのみ）。
+- elepay からの実際の Webhook 配信（実際のリクエストボディがモックで想定した形式と一致するかを含む）。ngrok や cloudflared などで公開 URL を用意し、実際の決済とあわせて検証する必要がある。
 
 ## 再現環境
 
