@@ -121,10 +121,11 @@ class WC_Elepay_Helper {
     }
 
     /**
-     * 以原始 JSON 调用 elepay GET 接口。
+     * Call an elepay GET endpoint and return the raw JSON response.
      *
-     * SDK 会把 paymentMethod 反序列化成 PaymentMethodType 枚举，elepay 新增的支付方式不在枚举里时
-     * 整个响应都会抛 InvalidArgumentException，所以响应里含支付方式的接口都不走 SDK。
+     * The SDK deserializes paymentMethod into the PaymentMethodType enum, so when elepay adds a payment
+     * method that is not in the enum, the whole response throws InvalidArgumentException. Endpoints whose
+     * responses contain payment methods therefore bypass the SDK.
      *
      * @param string $path
      * @return array
@@ -160,7 +161,7 @@ class WC_Elepay_Helper {
             }
             $content = wp_remote_retrieve_body($response);
             /**
-             * $paymentMethodMap 數據結構
+             * $paymentMethodMap data structure (localized names are sample API values)
              * {
              *   "alipay": {
              *     "name": {
@@ -180,7 +181,7 @@ class WC_Elepay_Helper {
             $paymentMethodMap = json_decode($content, true);
 
             /**
-             * $availablePaymentMethods 數據結構
+             * $availablePaymentMethods data structure
              * [
              *   {
              *     "paymentMethod": "alipay",

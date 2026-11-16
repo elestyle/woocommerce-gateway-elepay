@@ -313,7 +313,7 @@ function elepay_init_gateway_class() {
                     wc_add_notice( __( 'Payment process encountered error, please contact us.', 'woocommerce-gateway-elepay' ), 'error' );
                 }
             } else {
-                // 将订单状态回退
+                // Roll the order status back
                 $order->update_status( 'pending' );
 
                 if ( $status === 'cancelled' ) {
@@ -354,14 +354,14 @@ function elepay_init_gateway_class() {
             try {
                 $charge_object = WC_Elepay_Helper::get_charge_object( $charge_id );
             } catch ( Exception $e ) {
-                // charge 不存在时重试也没用，按请求有误返回 400，免得 elepay 一直重发。
+                // Retrying cannot help when the charge does not exist, so return 400 as a bad request to stop elepay from resending.
                 if ( $e instanceof ApiException && $e->getCode() === 404 ) {
                     status_header( 400 );
                     WC_Elepay_Logger::log( '[Webhook] ERROR::Charge does not exist::' . $e->getMessage() );
                     echo 'Charge does not exist.';
                     exit;
                 }
-                // 其余失败是本端或 elepay 的临时故障，不是请求本身有误，所以返回 500 让 elepay 重试。
+                // Other failures are temporary faults on our side or elepay's, not a bad request, so return 500 to let elepay retry.
                 status_header( 500 );
                 WC_Elepay_Logger::log( '[Webhook] ERROR::Exception when retrieving charge::' . $e->getMessage() );
                 echo 'Failed to retrieve charge.';
@@ -437,7 +437,7 @@ function elepay_init_gateway_class() {
                 }
             }
 
-            // 支付方式名称是订单的内置属性，用 setter 写入，HPOS 下才会存进订单表
+            // The payment method title is a built-in order property; write it through the setter so it is stored in the orders table under HPOS
             $order->set_payment_method_title( $payment_method_name );
             $order->set_transaction_id( $charge_object['id'] );
             if ( is_callable( [ $order, 'save' ] ) ) {
