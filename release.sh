@@ -5,6 +5,7 @@ zip -r woocommerce-gateway-elepay.zip \
   includes \
   languages \
   vendor \
+  LICENSE \
   composer.json \
   composer.lock \
   woocommerce-gateway-elepay.php
