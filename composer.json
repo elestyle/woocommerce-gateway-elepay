@@ -1,7 +1,7 @@
 {
   "name": "woocommerce-gateway/elepay",
   "version": "1.0.5",
-  "description": "elepay決済プラグイン",
+  "description": "elepay payment plugin",
   "license": "MIT",
   "require": {
     "elestyle/elepay-php-sdk": "^1.2"

@@ -1,81 +1,83 @@
-# 互換性検証記録：WordPress 7.1.4 + WooCommerce 11.2.2
+# Compatibility Test Report: WordPress 7.1.4 + WooCommerce 11.2.2
 
-- 検証日：2026-11-11
-- プラグインバージョン：1.0.4（`cbdf147`）
-- 結論：**クラシックチェックアウト（`[woocommerce_checkout]` ショートコード）では注文から EasyCheckout の表示まで正常に動作する。WooCommerce 標準のブロックチェックアウトでは elepay が表示されず、新規ストアの初期設定のままでは利用できない。**
+- Test date: 2026-11-11
+- Plugin version: 1.0.4 (`cbdf147`)
+- Conclusion: **With the classic checkout (the `[woocommerce_checkout]` shortcode), everything from placing an order to showing EasyCheckout works correctly. With WooCommerce's default block checkout, elepay is not shown, so the plugin cannot be used on a new store with its default settings.**
 
-## 環境
+The store was tested in Japanese. Text that appears on screen is quoted as the original Japanese UI string, followed by its English source string or meaning in parentheses.
 
-| コンポーネント | バージョン |
+## Environment
+
+| Component | Version |
 |---|---|
-| WordPress | 7.1.4（検証時点の最新） |
-| WooCommerce | 11.2.2（検証時点の最新） |
+| WordPress | 7.1.4 (latest at the time of testing) |
+| WooCommerce | 11.2.2 (latest at the time of testing) |
 | PHP | 8.3.36 |
 | MariaDB | 11.8.9 |
-| テーマ | Twenty Twenty-Five 1.5（WordPress 標準のブロックテーマ） |
+| Theme | Twenty Twenty-Five 1.5 (WordPress's default block theme) |
 
-ストア設定：国 JP、通貨 JPY、小数点以下 0 桁、言語 ja。テスト商品の単価は ¥100。
+Store settings: country JP, currency JPY, 0 decimal places, language ja. The test product costs ¥100.
 
-## 検証結果
+## Results
 
-### 正常
+### Working
 
-| 項目 | 結果 | 確認方法 |
+| Item | Result | Verified with |
 |---|---|---|
-| プラグイン有効化 | エラーなし。`WC_Elepay_Gateway` が登録され、`is_available()` は true | WP-CLI |
-| 管理画面の設定ページ | 各項目が正常に表示され、スタイルシート・`admin.js`・ClipboardJS が読み込まれる。Webhook URL は自動入力される | ブラウザ |
-| チェックアウト画面の決済方法アイコン | 本番キー使用時に正常に取得・表示される | ブラウザ |
-| 注文 → createCode | リクエストパラメータ（amount / JPY / orderNo / frontUrl）が正しく、`liveMode: true` の code が返る | プラグインログ |
-| EasyCheckout への遷移 | `easyqr.elepay.io/checkout.html?mode=auto&code=…` が開き、金額も正しい | ブラウザ |
-| EasyCheckout でのキャンセル | 注文支払いページに戻り、注文は `on-hold` から `pending` に戻る。ログに `Order cancelled.` が記録される | ブラウザ + WP-CLI |
-| 注文支払いページからの再支払い | code が再作成され、再び EasyCheckout が正常に開く | ブラウザ |
-| Webhook のパラメータチェック | パラメータ不足・注文が存在しない場合はいずれも 400 を返す | curl |
+| Plugin activation | No errors. `WC_Elepay_Gateway` is registered and `is_available()` returns true | WP-CLI |
+| Admin settings page | All fields render correctly, and the stylesheet, `admin.js` and ClipboardJS are loaded. The Webhook URL is filled in automatically | Browser |
+| Payment method icons on the checkout page | Fetched and displayed correctly when using live keys | Browser |
+| Order → createCode | Request parameters (amount / JPY / orderNo / frontUrl) are correct, and a code with `liveMode: true` is returned | Plugin log |
+| Redirect to EasyCheckout | `easyqr.elepay.io/checkout.html?mode=auto&code=…` opens with the correct amount | Browser |
+| Cancelling in EasyCheckout | Returns to the order payment page, and the order goes from `on-hold` back to `pending`. `Order cancelled.` is written to the log | Browser + WP-CLI |
+| Paying again from the order payment page | A new code is created and EasyCheckout opens correctly again | Browser |
+| Webhook parameter checks | Returns 400 both when parameters are missing and when the order does not exist | curl |
 
-### Webhook（elepay API をモックして検証）
+### Webhook (tested with a mocked elepay API)
 
-elepay からローカル環境へは Webhook が届かないため、テスト環境にだけ mu-plugin を置き、`pre_http_request` で `GET https://api.elepay.io/charges/{id}` を横取りして、用意した charge JSON を返すようにした。そのうえで curl から `/?wc-api=wc_elepay_paid` に Webhook ボディを POST し、レスポンス・注文ステータス・取引 ID・注文メモを確認した。
+Webhooks from elepay cannot reach a local environment, so a mu-plugin was added to the test environment only. It uses `pre_http_request` to intercept `GET https://api.elepay.io/charges/{id}` and return a prepared charge JSON. A Webhook body was then POSTed with curl to `/?wc-api=wc_elepay_paid`, and the response, order status, transaction ID and order notes were checked.
 
-| ケース | レスポンス | 注文 |
+| Case | Response | Order |
 |---|---|---|
-| 正常（captured、金額・注文番号一致） | 200 `Success` | `processing` になり、取引 ID と「elepay決済完了」メモが記録される |
-| 同じ charge の重複通知 | 200 `Success` | 変化なし、メモの重複もなし（冪等） |
-| 金額不一致 / status が captured 以外 / 注文番号不一致 | 400 `Order validation failed.` | `on-hold` のまま |
-| elepay API が 500 を返す | 500 `Failed to retrieve charge.` | `on-hold` のまま |
-| charge が存在しない（API が 404） | 500 `Failed to retrieve charge.` | `on-hold` のまま |
+| Normal (captured, amount and order number match) | 200 `Success` | Becomes `processing`; the transaction ID and the note 「elepay決済完了」 ("elepay charge complete") are recorded |
+| Duplicate notification for the same charge | 200 `Success` | No change and no duplicate note (idempotent) |
+| Amount mismatch / status other than captured / order number mismatch | 400 `Order validation failed.` | Stays `on-hold` |
+| elepay API returns 500 | 500 `Failed to retrieve charge.` | Stays `on-hold` |
+| Charge does not exist (API returns 404) | 500 `Failed to retrieve charge.` | Stays `on-hold` |
 
-### 問題
+### Issues
 
-1. **ブロックチェックアウトに elepay が表示されない（利用可否に影響）**
-   WooCommerce の新規ストアでは、チェックアウトページが標準で Checkout Block になる。プラグインがブロックチェックアウト用の決済方法（`Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType`）を登録していないため、ブロック決済方法の登録一覧には `cheque, paypal, bacs, cod` しかなく、チェックアウト画面に「利用可能な支払い方法がありません」と表示される。API キーとは無関係で、同じ設定のままクラシックのショートコードに切り替えれば表示される。
+1. **elepay is not shown in the block checkout (affects usability)**
+   On a new WooCommerce store, the checkout page uses the Checkout Block by default. The plugin does not register a payment method for the block checkout (`Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType`), so the list of registered block payment methods contains only `cheque, paypal, bacs, cod`, and the checkout page shows 「利用可能な支払い方法がありません」 ("There are no payment methods available"). This is unrelated to the API keys: with the same settings, switching to the classic shortcode makes elepay appear.
 
-2. **HPOS 互換性が未宣言。HPOS 有効時に決済方法名が書き込まれない**（本 PR で修正済み）
-   - `FeaturesUtil::declare_compatibility( 'custom_order_tables', ... )` による宣言がないため、WooCommerce は uncertain と判定し、プラグイン有効中は `wp wc hpos enable` が拒否される（`Some installed plugins are incompatible`）。
-   - HPOS を強制的に有効化して `order_validate` を呼び出したところ、`transaction_id` は正しく保存されたが、`update_post_meta( ..., '_payment_method_title', ... )` は旧来の postmeta にしか書き込まれず、注文の決済方法名は変わらなかった。
-   - Webhook 経由の決済完了でも再現：HPOS 有効時は決済方法名が「QRコード決済」のまま、HPOS 無効時は「PayPay」に正しく更新された。
+2. **HPOS compatibility is not declared, and the payment method title is not saved when HPOS is enabled** (fixed in this PR)
+   - Because compatibility is not declared with `FeaturesUtil::declare_compatibility( 'custom_order_tables', ... )`, WooCommerce treats the plugin as uncertain and refuses `wp wc hpos enable` while the plugin is active (`Some installed plugins are incompatible`).
+   - With HPOS force-enabled, calling `order_validate` saved `transaction_id` correctly, but `update_post_meta( ..., '_payment_method_title', ... )` only wrote to the legacy postmeta, so the order's payment method title did not change.
+   - Also reproduced when payment completes through the Webhook: with HPOS enabled the payment method title stayed 「QRコード決済」 ("QR Code Payment"), while with HPOS disabled it was correctly updated to "PayPay".
 
-3. **createCode 失敗時に注文が on-hold のまま残る**
-   `process_payment` は注文を `on-hold` に変更してから createCode を呼び出すため、呼び出しが失敗すると（実測は 401。ネットワーク障害や elepay 側の一時障害でも同様）注文が元に戻らない。
+3. **The order stays on-hold when createCode fails**
+   `process_payment` changes the order to `on-hold` before calling createCode, so when the call fails (observed with 401; network failures or temporary elepay outages behave the same) the order is not reverted.
 
-4. **エラーメッセージが重複表示される**：「決済に失敗しました。サポートまでお問い合わせください。」が 2 回表示される。
+4. **The error message is shown twice**: 「決済に失敗しました。サポートまでお問い合わせください。」 ("Payment process encountered error, please contact us.") is displayed twice.
 
-5. **PHP Notice / Deprecated（動作には影響なし）**
-   - `Translation loading for the woocommerce-gateway-elepay domain was triggered too early`（WordPress 6.7 以降のチェック）。
-   - elepay-php-sdk が PHP 8.1 以降で出す警告：`Return type of Elepay\Model\CodeReq::offsetExists($offset) should either be compatible with ArrayAccess::offsetExists(mixed $offset): bool ...`
+5. **PHP Notice / Deprecated (no functional impact)**
+   - `Translation loading for the woocommerce-gateway-elepay domain was triggered too early` (a check added in WordPress 6.7).
+   - A warning raised by elepay-php-sdk on PHP 8.1 and later: `Return type of Elepay\Model\CodeReq::offsetExists($offset) should either be compatible with ArrayAccess::offsetExists(mixed $offset): bool ...`
 
-6. **UI：elepay のロゴが大きすぎる**
-   `$this->icon` が出力する `<img>` にサイズ指定がなく、SVG 自体にも固有サイズがないため、Twenty Twenty-Five などのブロックテーマではコンテナ幅いっぱいに広がる。
+6. **UI: the elepay logo is too large**
+   The `<img>` output for `$this->icon` has no size, and the SVG itself has no intrinsic size, so in block themes such as Twenty Twenty-Five it stretches to the full width of its container.
 
-7. **Webhook：存在しない charge にも 500 を返す（軽微）**（本 PR で修正済み）
-   charge 取得の失敗はすべて一時障害として 500 を返すため、charge が存在しない（404）場合も elepay 側でリトライが続く。404 は 400 として扱うのが望ましい。
+7. **Webhook: returns 500 even for a charge that does not exist (minor)** (fixed in this PR)
+   Every failure to retrieve the charge is treated as a temporary fault and returns 500, so elepay keeps retrying even when the charge does not exist (404). A 404 should be treated as 400.
 
-### 未検証
+### Not verified
 
-- 決済完了後のリダイレクト（`status=captured` → 注文完了ページ → 注文が processing になる）。実際の決済が必要。
-- elepay からの実際の Webhook 配信（実際のリクエストボディがモックで想定した形式と一致するかを含む）。ngrok や cloudflared などで公開 URL を用意し、実際の決済とあわせて検証する必要がある。
+- The redirect after payment completes (`status=captured` → order received page → order becomes processing). This needs a real payment.
+- Real Webhook delivery from elepay, including whether the real request body matches the format assumed by the mock. This needs a public URL (via ngrok, cloudflared or similar) and a real payment.
 
-## 再現環境
+## Reproduction environment
 
-`vendor/` に依存関係をインストール済みであることを前提に（README 参照）、以下の `docker-compose.yml` を使う。`PLUGIN_DIR` は本リポジトリを指す。
+Assuming the dependencies are installed in `vendor/` (see README), use the following `docker-compose.yml`. `PLUGIN_DIR` points to this repository.
 
 ```yaml
 name: elepay-wp-test
@@ -132,19 +134,19 @@ wp plugin activate woocommerce-gateway-elepay
 wp option update woocommerce_currency JPY
 wp option update woocommerce_default_country JP:JP13
 wp option update woocommerce_price_num_decimals 0
-# クラシックチェックアウトで検証する場合：
+# To test with the classic checkout:
 wp post update "$(wp option get woocommerce_checkout_page_id)" \
   --post_content='<!-- wp:shortcode -->[woocommerce_checkout]<!-- /wp:shortcode -->'
 ```
 
-## 修正後の再検証（本 PR）
+## Re-test after the fixes (this PR)
 
-問題 2・7 の修正後、同じモック環境で再検証した。
+After fixing issues 2 and 7, the plugin was re-tested in the same mocked environment.
 
-| ケース | 結果 |
+| Case | Result |
 |---|---|
-| HPOS 互換性 | WooCommerce が compatible と判定し、`wp wc hpos enable` がそのまま成功する |
-| HPOS 有効時の Webhook 決済完了 | 決済方法名が「PayPay」に更新され、注文メモも「PayPay での支払い」になる |
-| HPOS 無効時の Webhook 決済完了 | 決済方法名が「PayPay」に更新され、postmeta の `_payment_method_title` は 1 件のみ（重複なし） |
-| charge が存在しない（API が 404） | 400 `Charge does not exist.` |
-| API が 500 / 金額不一致 / 重複通知 | それぞれ 500 / 400 / 200（変更なし） |
+| HPOS compatibility | WooCommerce reports the plugin as compatible, and `wp wc hpos enable` succeeds as is |
+| Webhook payment completion with HPOS enabled | The payment method title is updated to "PayPay", and the order note becomes 「PayPay での支払い」 ("Payment via PayPay") |
+| Webhook payment completion with HPOS disabled | The payment method title is updated to "PayPay", and there is exactly one `_payment_method_title` in postmeta (no duplicates) |
+| Charge does not exist (API returns 404) | 400 `Charge does not exist.` |
+| API returns 500 / amount mismatch / duplicate notification | 500 / 400 / 200 respectively (unchanged) |
