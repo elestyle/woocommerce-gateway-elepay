@@ -13,6 +13,8 @@
  * WC tested up to: 8.0
  * Text Domain: woocommerce-gateway-elepay
  * Domain Path: /languages
+ * License: MIT
+ * License URI: https://opensource.org/licenses/MIT
  */
 
 use Automattic\WooCommerce\Admin\Overrides\Order;

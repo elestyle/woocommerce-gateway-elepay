@@ -14,3 +14,8 @@ Use the following command to generate autoload in the `vendor/` directory
 COMPOSER_VENDOR_DIR=vendor composer require elestyle/elepay-php-sdk
 COMPOSER_VENDOR_DIR=vendor composer dumpautoload -o
 ```
+
+## License
+
+This plugin is released under the [MIT License](LICENSE).
+Third-party libraries bundled in `vendor/` remain under their own licenses.
