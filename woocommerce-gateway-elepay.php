@@ -5,12 +5,12 @@
  * Description: elepay決済プラグイン
  * Author: elepay
  * Author URI: https://elepay.io/
- * Version: 1.0.5
+ * Version: 1.1.0
  * Requires at least: 5.8
  * Requires PHP: 7.3
- * Tested up to: 6.0
+ * Tested up to: 7.1
  * WC requires at least: 6.6
- * WC tested up to: 8.0
+ * WC tested up to: 11.3
  * Text Domain: woocommerce-gateway-elepay
  * Domain Path: /languages
  * License: MIT
@@ -27,7 +27,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Required minimums and constants
  */
-define( 'WC_ELEPAY_VERSION', '1.0.5' );
+define( 'WC_ELEPAY_VERSION', '1.1.0' );
 define( 'WC_ELEPAY_MAIN_FILE', __FILE__ );
 define( 'WC_ELEPAY_PLUGIN_URL', untrailingslashit( plugins_url( basename( plugin_dir_path( __FILE__ ) ), basename( __FILE__ ) ) ) );
 define( 'WC_ELEPAY_PLUGIN_PATH', untrailingslashit( plugin_dir_path( __FILE__ ) ) );
