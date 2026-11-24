@@ -35,12 +35,31 @@ define( 'WC_ELEPAY_TEXT_DOMAIN', 'woocommerce-gateway-elepay' );
 define( 'WC_ELEPAY_WEBHOOK_NAME', 'wc_elepay_paid' );
 
 /*
- * Declare compatibility with High-Performance Order Storage (HPOS)
+ * Declare compatibility with High-Performance Order Storage (HPOS) and the Cart and Checkout blocks
  */
 add_action( 'before_woocommerce_init', function () {
     if ( class_exists( \Automattic\WooCommerce\Utilities\FeaturesUtil::class ) ) {
         \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'custom_order_tables', __FILE__, true );
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility( 'cart_checkout_blocks', __FILE__, true );
     }
+} );
+
+/*
+ * Register elepay as a payment method of the Cart and Checkout blocks
+ */
+add_action( 'woocommerce_blocks_loaded', function () {
+    if ( ! class_exists( \Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType::class ) ) {
+        return;
+    }
+
+    require_once __DIR__ . '/includes/class-wc-elepay-blocks-support.php';
+
+    add_action(
+        'woocommerce_blocks_payment_method_type_registration',
+        function ( \Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry ) {
+            $payment_method_registry->register( new WC_Elepay_Blocks_Support() );
+        }
+    );
 } );
 
 /*
@@ -138,6 +157,8 @@ function elepay_init_gateway_class() {
 
             // This action hook saves the settings
             add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'process_admin_options' ] );
+            // The block checkout caches the payment method icons, which depend on the API keys
+            add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, [ $this, 'clear_blocks_cache' ] );
             add_action( 'woocommerce_api_' . WC_ELEPAY_WEBHOOK_NAME, [ $this, 'webhook' ] );
             add_action( 'admin_enqueue_scripts', [ $this, 'admin_scripts' ] );
             add_action( 'wp_enqueue_scripts', [ $this, 'payment_scripts' ] );
@@ -146,6 +167,12 @@ function elepay_init_gateway_class() {
 
         public function init_form_fields() {
             $this->form_fields = require WC_ELEPAY_PLUGIN_PATH . '/includes/admin/settings.php';
+        }
+
+        public function clear_blocks_cache() {
+            if ( class_exists( 'WC_Elepay_Blocks_Support' ) ) {
+                WC_Elepay_Blocks_Support::clear_cache();
+            }
         }
 
         private function init_includes() {
@@ -225,11 +252,9 @@ function elepay_init_gateway_class() {
             if ( empty( $order ) ) {
                 WC_Elepay_Logger::log( '[注文確認] ERROR::Order does not exist.' );
                 wc_add_notice( __( 'Order does not exist.', 'woocommerce-gateway-elepay' ), 'error' );
-                return null;
+                // Return an explicit failure: the block checkout (Store API) expects an array, the classic checkout accepts both
+                return [ 'result' => 'failure' ];
             }
-
-            // Mark as on-hold (we're awaiting the cheque)
-            $order->update_status('on-hold', __( 'Awaiting elepay payment', 'woocommerce-gateway-elepay' ));
 
             if ( (integer)$order->get_total() === 0 ) {
                 $this->order_complete( $order );
@@ -252,6 +277,11 @@ function elepay_init_gateway_class() {
 
             try {
                 $payment_object = WC_Elepay_Helper::create_code_object( $order, $checkout_payment_url );
+
+                // Mark as on-hold only once the code exists. If createCode fails the order must stay pending:
+                // the block checkout treats an order that has left pending as paid and shows the order received page.
+                $order->update_status('on-hold', __( 'Awaiting elepay payment', 'woocommerce-gateway-elepay' ));
+
                 $redirect_url = add_query_arg(
                     [
                         'mode' => 'auto'
@@ -266,7 +296,8 @@ function elepay_init_gateway_class() {
             } catch ( Exception $e ) {
                 WC_Elepay_Logger::log( '[注文処理] ERROR::Exception when calling CodeApi->createCode::' . $e->getMessage() );
                 wc_add_notice( __( 'Payment process encountered error, please contact us.', 'woocommerce-gateway-elepay' ), 'error' );
-                return null;
+                // Return an explicit failure: the block checkout (Store API) expects an array, the classic checkout accepts both
+                return [ 'result' => 'failure' ];
             }
         }
 
